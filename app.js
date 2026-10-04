@@ -18,6 +18,11 @@
     shown: 0,
     dataDate: "",
     priceMax: 200,
+    // key -> { lo, hi } 스냅이 적용된 실제 값.
+    // input[type=range] 는 위치를 보여주는 거울일 뿐이다. 로그 스케일에서
+    // 슬라이더 값은 정수여야 하므로 실제 값(30000)을 정수 위치로 되돌리면
+    // 30306 이 되어 정지점을 잃는다.
+    ranges: {},
   };
 
   var el = {};
@@ -66,24 +71,74 @@
   var LOG_LO = Math.log(REVIEW_LO);
   var LOG_HI = Math.log(REVIEW_HI);
 
+  // snap 은 썸이 붙는 단위다. 썸을 직접 구현하면서 input.step 은 무시되므로
+  // 여기서 직접 맞춘다. 1% 단위로 움직여도 무의미하다.
+  var REVIEW_STOPS = [500, 1000, 5000, 10000, 30000, 100000, 1000000];
+
   var RANGES = {
-    price:    { lo: 0, hi: 0, linear: true },
-    discount: { lo: 0, hi: 95, linear: true },
-    rating:   { lo: 0, hi: 100, linear: true },
-    reviews:  { lo: REVIEW_LO, hi: REVIEW_HI, linear: false },
+    price:    { lo: 0, hi: 0, linear: true, snap: 1 },
+    discount: { lo: 0, hi: 95, linear: true, snap: 5 },
+    rating:   { lo: 0, hi: 100, linear: true, snap: 5 },
+    reviews:  { lo: REVIEW_LO, hi: REVIEW_HI, linear: false, stops: REVIEW_STOPS },
   };
 
+  /** 실제 값을 붙는 단위로 맞춘다. */
+  function snapValue(key, raw) {
+    var r = RANGES[key];
+    if (r.stops) {
+      var best = r.stops[0];
+      var bestD = Math.abs(best - raw);
+      for (var i = 1; i < r.stops.length; i++) {
+        var d = Math.abs(r.stops[i] - raw);
+        if (d < bestD) { bestD = d; best = r.stops[i]; }
+      }
+      return best;
+    }
+    var step = r.snap || 1;
+    return Math.max(0, Math.round(raw / step) * step);
+  }
+
+  function fullRange(key) {
+    var r = RANGES[key];
+    return { lo: r.lo, hi: r.hi };
+  }
+
+  /** 스냅된 실제 값으로 상태를 설정하고 화면을 갱신한다. */
+  function setRangeState(key, lo, hi) {
+    var r = RANGES[key];
+    var nlo = Math.max(r.lo, Math.min(r.hi, lo));
+    var nhi = Math.max(r.lo, Math.min(r.hi, hi));
+    if (nlo > nhi) { var t = nlo; nlo = nhi; nhi = t; }
+    state.ranges[key] = { lo: nlo, hi: nhi };
+    paintRange(key);
+  }
+
+  /** 상태 -> 슬라이더 위치 / 채움 / 썸 좌표 */
+  function paintRange(key) {
+    var p = state.ranges[key];
+    var loPct = toPct(key, p.lo);
+    var hiPct = toPct(key, p.hi);
+
+    el[key + "Min"].value = sliderOf(key, loPct);
+    el[key + "Max"].value = sliderOf(key, hiPct);
+
+    var fill = el[key + "Fill"];
+    fill.style.left = loPct + "%";
+    fill.style.width = Math.max(0, hiPct - loPct) + "%";
+
+    var track = el[key + "Min"].parentElement;
+    var lo = track.querySelector(".rng-thumb-lo");
+    var hi = track.querySelector(".rng-thumb-hi");
+    if (lo) lo.style.left = loPct + "%";
+    if (hi) hi.style.left = hiPct + "%";
+  }
+
   // 내부 교환은 모두 백분율(0~100)로 한다. 슬라이더 값(0~sliderMax)과
-  // 실제 값 사이의 변환은 여기 두 곳에서만 한다.
+  // 실제 값 사이의 변환은 여기서만 한다.
   // 할인율은 0~95, 가격은 0~p98 처럼 스케일이 다르기 때문에
   // 슬라이더 값을 곧바로 백분율로 쓰면 안 된다.
 
   function sliderMax(key) { return RANGES[key].linear ? Math.max(1, RANGES[key].hi) : 100; }
-
-  /** 슬라이더 값 → 백분율 0~100 */
-  function pctOf(key, sliderValue) {
-    return (Number(sliderValue) / sliderMax(key)) * 100;
-  }
 
   /** 백분율 0~100 → 슬라이더 값 (반올림) */
   function sliderOf(key, pct) {
@@ -111,35 +166,9 @@
     return Math.max(0, Math.min(100, ((Math.log(value) - LOG_LO) / (LOG_HI - LOG_LO)) * 100));
   }
 
-  function realPair(key) {
-    var a = pctOf(key, el[key + "Min"].value);
-    var b = pctOf(key, el[key + "Max"].value);
-    var lo = toReal(key, Math.min(a, b));
-    var hi = toReal(key, Math.max(a, b));
-    if (!RANGES[key].linear) {
-      lo = Math.round(lo);
-      hi = Math.round(hi);
-    }
-    return { lo: lo, hi: hi };
-  }
-
   function setRange(key) {
-    var a = el[key + "Min"];
-    var b = el[key + "Max"];
-    var track = a.parentElement;
-
-    var loPct = pctOf(key, a.value);
-    var hiPct = pctOf(key, b.value);
-    if (loPct > hiPct) { var t = loPct; loPct = hiPct; hiPct = t; }
-
-    var fill = el[key + "Fill"];
-    fill.style.left = loPct + "%";
-    fill.style.width = Math.max(0, hiPct - loPct) + "%";
-
-    var lo = track.querySelector(".rng-thumb-lo");
-    var hi = track.querySelector(".rng-thumb-hi");
-    if (lo) lo.style.left = pctOf(key, a.value) + "%";
-    if (hi) hi.style.left = pctOf(key, b.value) + "%";
+    if (!state.ranges[key]) state.ranges[key] = fullRange(key);
+    paintRange(key);
   }
 
   /**
@@ -149,6 +178,13 @@
    * 터치 기기에서 두 썸 중 하나만 잡히는 문제가 있었다. 썸을 div 로 만들고
    * 트랙에서 포인터 이벤트를 직접 받는다. 마우스와 터치가 같은 경로를 탄다.
    */
+  function buildThumbsAll() {
+    Object.keys(RANGES).forEach(function (key) {
+      buildThumbs(key);
+      paintRange(key);
+    });
+  }
+
   function buildThumbs(key) {
     var track = el[key + "Min"].parentElement;
     ["lo", "hi"].forEach(function (side) {
@@ -173,27 +209,23 @@
 
     /** 두 썸 중 어느 쪽을 잡을지 정한다. 가까운 쪽, 동률이면 항상 최소 쪽. */
     function pick(pct) {
-      var loPct = pctOf(key, el[key + "Min"].value);
-      var hiPct = pctOf(key, el[key + "Max"].value);
+      var p = state.ranges[key];
+      var loPct = toPct(key, p.lo);
+      var hiPct = toPct(key, p.hi);
       return Math.abs(pct - loPct) <= Math.abs(pct - hiPct) ? "Min" : "Max";
     }
 
+    /**
+     * 썸 위치를 실제 스냅 값으로 바꾼다.
+     * 슬라이더 값(로그 위치)을 거꾸로 되돌리면 정수 반올림 때문에
+     * 30000 이 30306 같은 값이 되어 정지점을 잃는다.
+     * 그래서 pct -> 실제값 -> 스냅 해서 상태에 직접 넣는다.
+     */
     function apply(pct) {
-      var span = sliderMax(key);
-      var minIn = el[key + "Min"];
-      var maxIn = el[key + "Max"];
-      var v = String(Math.round((pct / 100) * span));
-
-      if (active === "Min") {
-        // 최소값은 최대값을 넘을 수 없다
-        if (Number(v) > Number(maxIn.value)) v = maxIn.value;
-        minIn.value = v;
-      } else {
-        if (Number(v) < Number(minIn.value)) v = minIn.value;
-        maxIn.value = v;
-      }
-
-      setRange(key);
+      var p = state.ranges[key];
+      var snapped = snapValue(key, toReal(key, pct));
+      if (active === "Min") setRangeState(key, snapped, Math.max(snapped, p.hi));
+      else setRangeState(key, Math.min(snapped, p.lo), snapped);
       updateLabels();
       scheduleApply(key);
     }
@@ -233,24 +265,36 @@
     track.addEventListener("pointerup", end);
     track.addEventListener("pointercancel", end);
 
-    // 키보드 접근성
+    // 키보드 접근성. 한 칸 이동도 스냅 단위를 따른다.
     ["lo", "hi"].forEach(function (side) {
       var thumb = track.querySelector(".rng-thumb-" + side);
       thumb.addEventListener("keydown", function (e) {
         var which = side === "lo" ? "Min" : "Max";
-        var span = sliderMax(key);
-        var step = e.shiftKey ? Math.max(1, Math.round(span / 20)) : 1;
-        var delta = 0;
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") delta = -step;
-        else if (e.key === "ArrowRight" || e.key === "ArrowUp") delta = step;
-        else if (e.key === "Home") delta = -span;
-        else if (e.key === "End") delta = span;
+        var r = RANGES[key];
+        var p = state.ranges[key];
+        var dir = 0;
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") dir = -1;
+        else if (e.key === "ArrowRight" || e.key === "ArrowUp") dir = 1;
+        else if (e.key === "Home" || e.key === "End") dir = 0;
         else return;
         e.preventDefault();
-        var v = Number(el[key + which].value) + delta;
-        v = Math.max(0, Math.min(span, v));
-        el[key + which].value = String(v);
-        setRange(key);
+
+        var cur = which === "Min" ? p.lo : p.hi;
+        var next;
+        if (r.stops) {
+          var i = nearestStop(r.stops, cur);
+          var target = e.key === "Home" ? 0 : e.key === "End" ? r.stops.length - 1 : i + dir;
+          target = Math.max(0, Math.min(r.stops.length - 1, target));
+          next = r.stops[target];
+        } else {
+          var unit = r.snap || 1;
+          var step = e.shiftKey ? Math.max(unit, snapValue(key, (r.hi - r.lo) / 20)) : unit;
+          var to = e.key === "Home" ? r.lo : e.key === "End" ? r.hi : cur + dir * step;
+          next = snapValue(key, to);
+        }
+
+        if (which === "Min") setRangeState(key, next, Math.max(next, p.hi));
+        else setRangeState(key, Math.min(next, p.lo), next);
         updateLabels();
         saveFilters();
         renderReset();
@@ -258,11 +302,21 @@
     });
   }
 
+  function nearestStop(stops, value) {
+    var best = 0;
+    var bestD = Math.abs(stops[0] - value);
+    for (var i = 1; i < stops.length; i++) {
+      var d = Math.abs(stops[i] - value);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
   /* ---------- 필터 상태 ---------- */
   function readFilters() {
     var f = { q: el.q.value.trim().toLowerCase(), sort: el.sort.value, hideSeen: el.hideSeen.checked };
     Object.keys(RANGES).forEach(function (key) {
-      var p = realPair(key);
+      var p = state.ranges[key] || fullRange(key);
       f[key + "Min"] = p.lo;
       f[key + "Max"] = p.hi;
     });
@@ -280,13 +334,10 @@
       if (s.q) el.q.value = s.q;
       if (s.sort) el.sort.value = s.sort;
       Object.keys(RANGES).forEach(function (key) {
-        var r = RANGES[key];
-        if (typeof s[key + "Min"] === "number") {
-          el[key + "Min"].value = sliderOf(key, toPct(key, Math.max(r.lo, s[key + "Min"])));
-        }
-        if (typeof s[key + "Max"] === "number") {
-          el[key + "Max"].value = sliderOf(key, toPct(key, Math.min(r.hi, s[key + "Max"])));
-        }
+        var full = fullRange(key);
+        var lo = typeof s[key + "Min"] === "number" ? snapValue(key, s[key + "Min"]) : full.lo;
+        var hi = typeof s[key + "Max"] === "number" ? snapValue(key, s[key + "Max"]) : full.hi;
+        setRangeState(key, lo, hi);
       });
       el.hideSeen.checked = !!s.hideSeen;
     } catch (e) {}
@@ -301,7 +352,7 @@
       var g = state.list[i];
       if (g.s < f.priceMin || g.s > f.priceMax) continue;
       if (g.d < f.discountMin || g.d > f.discountMax) continue;
-      if (g.p < f.ratingMin || g.p > f.ratingMax) continue;
+      if (g.r < f.ratingMin || g.r > f.ratingMax) continue;
       if (g.c < f.reviewsMin || g.c > f.reviewsMax) continue;
       if (f.hideSeen && g.f < state.dataDate) continue;
       if (f.q && g.n.toLowerCase().indexOf(f.q) === -1) continue;
@@ -315,13 +366,13 @@
         out.sort(function (a, b) { return (a.s - b.s) * dir || a.c - b.c || (a.i < b.i ? -1 : 1); });
         break;
       case "discount-desc":
-        out.sort(function (a, b) { return b.d - a.d || b.p - a.p || (a.i < b.i ? -1 : 1); });
+        out.sort(function (a, b) { return b.d - a.d || b.r - a.r || (a.i < b.i ? -1 : 1); });
         break;
       case "rating-desc":
-        out.sort(function (a, b) { return b.p - a.p || b.c - a.c || (a.i < b.i ? -1 : 1); });
+        out.sort(function (a, b) { return b.r - a.r || b.c - a.c || (a.i < b.i ? -1 : 1); });
         break;
       case "reviews-desc":
-        out.sort(function (a, b) { return b.c - a.c || b.p - a.p || (a.i < b.i ? -1 : 1); });
+        out.sort(function (a, b) { return b.c - a.c || b.r - a.r || (a.i < b.i ? -1 : 1); });
         break;
       case "name-asc":
         out.sort(function (a, b) { return a.n.localeCompare(b.n, "ko") || (a.i < b.i ? -1 : 1); });
@@ -355,7 +406,7 @@
           '<span class="price">' + esc(money(g.s)) + '</span>' +
           '<span class="price-off">' + esc(money(g.o)) + '</span>' +
           '<span class="meta">' +
-            '<span class="rating">★ ' + g.p + '%</span>' +
+            '<span class="rating">★ ' + g.r + '%</span>' +
             '<span class="reviews">' + compact(g.c) + '</span>' +
           '</span>' +
         '</div>' +
@@ -531,10 +582,8 @@
       el.q.value = "";
       el.sort.value = "price-asc";
       Object.keys(RANGES).forEach(function (key) {
-        var full = sliderMax(key);
-        el[key + "Min"].value = "0";
-        el[key + "Max"].value = String(full);
-        setRange(key);
+        var full = fullRange(key);
+        setRangeState(key, full.lo, full.hi);
       });
       el.hideSeen.checked = false;
       updateLabels();
@@ -629,9 +678,11 @@
     // 가격 상한을 먼저 정한 뒤에 저장된 필터를 복원해야 한다.
     // 순서가 바뀌면 priceMin/max 의 max 가 아직 0 이어서 복원값이 깨진다.
     calibratePrice();
+    Object.keys(RANGES).forEach(function (key) {
+      state.ranges[key] = fullRange(key);
+    });
+    buildThumbsAll();
     loadFilters();
-    Object.keys(RANGES).forEach(buildThumbs);
-    Object.keys(RANGES).forEach(setRange);
     updateLabels();
     header();
     bind();
