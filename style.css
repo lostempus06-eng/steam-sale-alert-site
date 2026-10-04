@@ -145,6 +145,8 @@ body {
   -webkit-appearance: none;
   appearance: none;
   pointer-events: none;
+  /* 썸을 끌 때 페이지가 스크롤되면 안 된다. 터치에서 필수. */
+  touch-action: none;
 }
 .rng-track input[type=range]:focus { outline: none; }
 .rng-track input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(26,159,255,.35); }
