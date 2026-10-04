@@ -114,11 +114,11 @@ body {
 }
 .rng-head output { color: var(--blue); font-weight: 700; font-size: 12px; }
 
-.rng-track { position: relative; height: 26px; }
+.rng-track { position: relative; height: 30px; }
 .rng-track::before {
   content: "";
   position: absolute;
-  left: 0; right: 0; top: 11px;
+  left: 0; right: 0; top: 13px;
   height: 4px;
   border-radius: 2px;
   background: #0e1620;
@@ -126,57 +126,59 @@ body {
 }
 .rng-fill {
   position: absolute;
-  top: 11px;
+  top: 13px;
   height: 4px;
   border-radius: 2px;
   background: var(--accent);
   pointer-events: none;
 }
 
-/* 두 input 이 같은 트랙을 공유한다. 트랙은 클릭 무시, 썸만 잡는다. */
+/* 두 input 이 같은 트랙을 공유한다.
+ * 썸은 브라우저의 ::-webkit-slider-thumb 가 아니라 직접 만든 div 다.
+ * input 에 pointer-events:none 을 주고 썸에 auto 를 주는 방식은
+ * 마우스에서는 동작하지만 터치 기기에서는 한쪽만 잡히는 문제가 있었다.
+ * (pseudo-element 의 pointer-events 오버라이드가 터치에서는 신뢰되지 않는다)
+ * 썸을 div 로 만들고 .rng-track 에서 포인터 이벤트를 직접 처리한다.
+ * input 은 값 저장과 키보드 접근 용도로만 쓴다. */
+.rng-track {
+  position: relative;
+  height: 30px;
+  touch-action: none;
+  cursor: pointer;
+}
 .rng-track input[type=range] {
   position: absolute;
   left: 0;
   width: 100%;
   top: 0;
-  height: 26px;
+  height: 30px;
   margin: 0;
-  background: none;
+  opacity: 0;
+  pointer-events: none;
   -webkit-appearance: none;
   appearance: none;
-  pointer-events: none;
-  /* 썸을 끌 때 페이지가 스크롤되면 안 된다. 터치에서 필수. */
-  touch-action: none;
 }
 .rng-track input[type=range]:focus { outline: none; }
-.rng-track input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(26,159,255,.35); }
 
-.rng-track input[type=range]::-webkit-slider-runnable-track { height: 26px; background: none; border: none; }
-.rng-track input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  pointer-events: auto;
-  width: 18px;
-  height: 18px;
+.rng-thumb {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
   border-radius: 50%;
   background: #ffffff;
   border: 3px solid var(--accent);
-  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  box-shadow: 0 1px 5px rgba(0,0,0,.6);
   cursor: grab;
+  touch-action: none;
+  transition: transform .08s;
 }
-.rng-track input[type=range]::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.12); }
-
-.rng-track input[type=range]::-moz-range-track { height: 26px; background: none; border: none; }
-.rng-track input[type=range]::-moz-range-thumb {
-  pointer-events: auto;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid var(--accent);
-  box-shadow: 0 1px 4px rgba(0,0,0,.5);
-  cursor: grab;
-}
+.rng-thumb:hover { transform: scale(1.1); }
+.rng-thumb.dragging { transform: scale(1.22); cursor: grabbing; box-shadow: 0 0 0 7px rgba(26,159,255,.22); }
+.rng-thumb:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(26,159,255,.45); }
+.rng-track.pinch-lo .rng-thumb-lo,
+.rng-track.pinch-hi .rng-thumb-hi { z-index: 3; }
 
 /* 눈금은 실제 값 좌표에 배치한다. 로그 스케일이라 균등 배치가 틀린다. */
 .rng-ticks {

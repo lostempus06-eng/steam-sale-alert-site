@@ -126,19 +126,136 @@
   function setRange(key) {
     var a = el[key + "Min"];
     var b = el[key + "Max"];
-    var span = sliderMax(key);
-
-    // 핸들이 서로 넘어가면 지금 끌고 있는 쪽을 따라간다
-    if (Number(a.value) > Number(b.value)) {
-      if (document.activeElement === a) b.value = a.value;
-      else a.value = b.value;
-    }
+    var track = a.parentElement;
 
     var loPct = pctOf(key, a.value);
     var hiPct = pctOf(key, b.value);
+    if (loPct > hiPct) { var t = loPct; loPct = hiPct; hiPct = t; }
+
     var fill = el[key + "Fill"];
     fill.style.left = loPct + "%";
     fill.style.width = Math.max(0, hiPct - loPct) + "%";
+
+    var lo = track.querySelector(".rng-thumb-lo");
+    var hi = track.querySelector(".rng-thumb-hi");
+    if (lo) lo.style.left = pctOf(key, a.value) + "%";
+    if (hi) hi.style.left = pctOf(key, b.value) + "%";
+  }
+
+  /**
+   * 썸을 직접 만들어 포인터 이벤트를 처리한다.
+   *
+   * 브라우저 썸(pseudo-element)에 pointer-events 를 오버라이드하는 방식은
+   * 터치 기기에서 두 썸 중 하나만 잡히는 문제가 있었다. 썸을 div 로 만들고
+   * 트랙에서 포인터 이벤트를 직접 받는다. 마우스와 터치가 같은 경로를 탄다.
+   */
+  function buildThumbs(key) {
+    var track = el[key + "Min"].parentElement;
+    ["lo", "hi"].forEach(function (side) {
+      var t = document.createElement("div");
+      t.className = "rng-thumb rng-thumb-" + side;
+      t.setAttribute("tabindex", "0");
+      t.setAttribute("role", "slider");
+      t.setAttribute("aria-label", (key === "price" ? "가격" : key === "rating" ? "평점" : key) + (side === "lo" ? " 최소" : " 최대"));
+      track.appendChild(t);
+    });
+    bindRangePointer(key, track);
+  }
+
+  function bindRangePointer(key, track) {
+    var active = null;   // 현재 끌고 있는 썸 ("Min" | "Max")
+    var activeEl = null;
+
+    function pctFromEvent(e) {
+      var r = track.getBoundingClientRect();
+      return Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
+    }
+
+    /** 두 썸 중 어느 쪽을 잡을지 정한다. 가까운 쪽, 동률이면 항상 최소 쪽. */
+    function pick(pct) {
+      var loPct = pctOf(key, el[key + "Min"].value);
+      var hiPct = pctOf(key, el[key + "Max"].value);
+      return Math.abs(pct - loPct) <= Math.abs(pct - hiPct) ? "Min" : "Max";
+    }
+
+    function apply(pct) {
+      var span = sliderMax(key);
+      var minIn = el[key + "Min"];
+      var maxIn = el[key + "Max"];
+      var v = String(Math.round((pct / 100) * span));
+
+      if (active === "Min") {
+        // 최소값은 최대값을 넘을 수 없다
+        if (Number(v) > Number(maxIn.value)) v = maxIn.value;
+        minIn.value = v;
+      } else {
+        if (Number(v) < Number(minIn.value)) v = minIn.value;
+        maxIn.value = v;
+      }
+
+      setRange(key);
+      updateLabels();
+      scheduleApply(key);
+    }
+
+    var applyTimer = null;
+    function scheduleApply() {
+      clearTimeout(applyTimer);
+      applyTimer = setTimeout(function () { saveFilters(); renderReset(); }, 160);
+    }
+
+    track.addEventListener("pointerdown", function (e) {
+      if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
+      var pct = pctFromEvent(e);
+      active = pick(pct);
+      activeEl = track.querySelector(active === "Min" ? ".rng-thumb-lo" : ".rng-thumb-hi");
+      if (activeEl) activeEl.classList.add("dragging");
+      try { track.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+      apply(pct);
+    });
+
+    track.addEventListener("pointermove", function (e) {
+      if (!active) return;
+      e.preventDefault();
+      apply(pctFromEvent(e));
+    });
+
+    function end(e) {
+      if (!active) return;
+      if (activeEl) activeEl.classList.remove("dragging");
+      active = null;
+      activeEl = null;
+      try { track.releasePointerCapture(e.pointerId); } catch (err) {}
+      saveFilters();
+      renderReset();
+    }
+    track.addEventListener("pointerup", end);
+    track.addEventListener("pointercancel", end);
+
+    // 키보드 접근성
+    ["lo", "hi"].forEach(function (side) {
+      var thumb = track.querySelector(".rng-thumb-" + side);
+      thumb.addEventListener("keydown", function (e) {
+        var which = side === "lo" ? "Min" : "Max";
+        var span = sliderMax(key);
+        var step = e.shiftKey ? Math.max(1, Math.round(span / 20)) : 1;
+        var delta = 0;
+        if (e.key === "ArrowLeft" || e.key === "ArrowDown") delta = -step;
+        else if (e.key === "ArrowRight" || e.key === "ArrowUp") delta = step;
+        else if (e.key === "Home") delta = -span;
+        else if (e.key === "End") delta = span;
+        else return;
+        e.preventDefault();
+        var v = Number(el[key + which].value) + delta;
+        v = Math.max(0, Math.min(span, v));
+        el[key + which].value = String(v);
+        setRange(key);
+        updateLabels();
+        saveFilters();
+        renderReset();
+      });
+    });
   }
 
   /* ---------- 필터 상태 ---------- */
@@ -381,21 +498,14 @@
       });
     });
 
-    // 범위형 필터: 썸을 끌 때마다 라벨과 요약을 갱신하고,
-    // 손을 떼면 필터를 실제로 적용한다.
+    // 범위형 필터의 포인터/키보드 동작은 buildThumbs 에서 물린다.
+    // 여기서는 프로그램적으로 값을 바꿀 때(초기화, localStorage 복원)만 반응한다.
     Object.keys(RANGES).forEach(function (key) {
       ["Min", "Max"].forEach(function (side) {
-        var input = el[key + side];
-        input.addEventListener("input", function () {
+        el[key + side].addEventListener("input", function () {
           setRange(key);
           updateLabels();
           schedule();
-        });
-        input.addEventListener("change", function () {
-          setRange(key);
-          updateLabels();
-          saveFilters();
-          renderReset();
         });
       });
     });
@@ -514,6 +624,7 @@
     // 순서가 바뀌면 priceMin/max 의 max 가 아직 0 이어서 복원값이 깨진다.
     calibratePrice();
     loadFilters();
+    Object.keys(RANGES).forEach(buildThumbs);
     Object.keys(RANGES).forEach(setRange);
     updateLabels();
     header();
