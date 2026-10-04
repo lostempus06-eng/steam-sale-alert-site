@@ -340,6 +340,10 @@
       ? '<img class="thumb" loading="lazy" decoding="async" src="' + esc(url) +
         '" alt="" data-initial="' + initial + '">'
       : '<div class="thumb-fallback">' + initial + '</div>';
+    // 세로 두 줄로 묶는다:
+    //   제목                      할인율
+    //   할인가 기존가      ★평점 리뷰수
+    // 이미지가 낮아서 3줄이면 세로로 빈칸이 많이 생긴다.
     return '<a class="card" href="' + esc(storeUrl(g.i)) + '" target="_blank" rel="noopener">' +
       img +
       '<div class="card-body">' +
@@ -350,10 +354,10 @@
         '<div class="card-mid">' +
           '<span class="price">' + esc(money(g.s)) + '</span>' +
           '<span class="price-off">' + esc(money(g.o)) + '</span>' +
-        '</div>' +
-        '<div class="card-bot">' +
-          '<span class="rating">★ ' + g.p + '%</span>' +
-          '<span>리뷰 ' + compact(g.c) + '</span>' +
+          '<span class="meta">' +
+            '<span class="rating">★ ' + g.p + '%</span>' +
+            '<span class="reviews">' + compact(g.c) + '</span>' +
+          '</span>' +
         '</div>' +
       '</div>' +
     '</a>';
