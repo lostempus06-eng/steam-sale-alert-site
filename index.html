@@ -58,32 +58,66 @@
     </div>
 
     <div class="row">
-      <div class="field grow">
-        <label for="price">가격대 <output id="priceOut"></output></label>
-        <input id="price" type="range" min="0" max="200" step="5" value="200">
+      <div class="rng">
+        <div class="rng-head">
+          <label id="priceLabel">가격대</label>
+          <output id="priceOut"></output>
+        </div>
+        <div class="rng-track">
+          <div class="rng-fill" id="priceFill"></div>
+          <input type="range" id="priceMin" min="0" max="1000" step="1" value="0" aria-labelledby="priceLabel">
+          <input type="range" id="priceMax" min="0" max="1000" step="1" value="1000" aria-labelledby="priceLabel">
+        </div>
+        <div class="rng-ticks" data-ticks="price"><span data-v="0">0</span></div>
       </div>
-      <div class="field grow">
-        <label for="discount">최소 할인율 <output id="discountOut"></output></label>
-        <input id="discount" type="range" min="0" max="90" step="5" value="0">
+
+      <div class="rng">
+        <div class="rng-head">
+          <label id="discountLabel">할인율</label>
+          <output id="discountOut"></output>
+        </div>
+        <div class="rng-track">
+          <div class="rng-fill" id="discountFill"></div>
+          <input type="range" id="discountMin" min="0" max="95" step="5" value="0" aria-labelledby="discountLabel">
+          <input type="range" id="discountMax" min="0" max="95" step="5" value="95" aria-labelledby="discountLabel">
+        </div>
+        <div class="rng-ticks" data-ticks="discount"><span data-v="0">0%</span><span data-v="95">95%</span></div>
       </div>
     </div>
 
     <div class="row">
-      <div class="field grow">
-        <label for="rating">최소 평점 <output id="ratingOut"></output></label>
-        <input id="rating" type="range" min="0" max="100" step="1" value="0">
+      <div class="rng">
+        <div class="rng-head">
+          <label id="ratingLabel">평점</label>
+          <output id="ratingOut"></output>
+        </div>
+        <div class="rng-track">
+          <div class="rng-fill" id="ratingFill"></div>
+          <input type="range" id="ratingMin" min="0" max="100" step="1" value="0" aria-labelledby="ratingLabel">
+          <input type="range" id="ratingMax" min="0" max="100" step="1" value="100" aria-labelledby="ratingLabel">
+        </div>
+        <div class="rng-ticks" data-ticks="rating"><span data-v="0">0%</span><span data-v="100">100%</span></div>
       </div>
-      <div class="field grow">
-        <label for="reviews">최소 리뷰 수</label>
-        <select id="reviews">
-          <option value="0">전체</option>
-          <option value="500">500+</option>
-          <option value="1000">1,000+</option>
-          <option value="5000">5,000+</option>
-          <option value="10000">10,000+</option>
-          <option value="50000">50,000+</option>
-          <option value="100000">100,000+</option>
-        </select>
+
+      <div class="rng">
+        <div class="rng-head">
+          <label id="reviewsLabel">리뷰 수</label>
+          <output id="reviewsOut"></output>
+        </div>
+        <div class="rng-track">
+          <div class="rng-fill" id="reviewsFill"></div>
+          <input type="range" id="reviewsMin" min="0" max="100" step="1" value="0" aria-labelledby="reviewsLabel">
+          <input type="range" id="reviewsMax" min="0" max="100" step="1" value="100" aria-labelledby="reviewsLabel">
+        </div>
+        <!-- 로그 스케일이므로 눈금을 실제 값 좌표에 배치한다 -->
+        <div class="rng-ticks" data-ticks="reviews">
+          <span data-v="500">500</span>
+          <span data-v="1000">1K</span>
+          <span data-v="5000">5K</span>
+          <span data-v="10000">10K</span>
+          <span data-v="100000">100K</span>
+          <span data-v="1000000">1M+</span>
+        </div>
       </div>
     </div>
 

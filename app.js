@@ -21,10 +21,13 @@
   };
 
   var el = {};
-  ["stats", "stamp", "q", "sort", "price", "priceOut", "discount", "discountOut",
-   "rating", "ratingOut", "reviews", "hideSeen", "reset", "count", "grid",
+  ["stats", "stamp", "q", "sort", "hideSeen", "reset", "count", "grid",
    "sentinel", "empty", "more", "footSub", "filters", "filterToggle",
-   "filterSummary", "countMini"].forEach(function (id) {
+   "filterSummary", "countMini",
+   "priceOut", "discountOut", "ratingOut", "reviewsOut",
+   "priceFill", "discountFill", "ratingFill", "reviewsFill",
+   "priceMin", "priceMax", "discountMin", "discountMax",
+   "ratingMin", "ratingMax", "reviewsMin", "reviewsMax"].forEach(function (id) {
     el[id] = document.getElementById(id);
   });
 
@@ -53,17 +56,100 @@
     return (state.data.imgPrefix || "") + g.i + "/" + g.g;
   }
 
+  /* ---------- 범위형 필터 ----------
+   * 숫자 필터는 최소/최대 쌍으로 관리한다.
+   * 리뷰 수는 500 ~ 1,000,000 이라 선형 슬라이더로는 저역을 만질 수 없다.
+   * 슬라이더 위치(0~100)를 로그 스케일로 실제 리뷰 수에 매핑한다.
+   */
+  var REVIEW_LO = 500;
+  var REVIEW_HI = 1000000;
+  var LOG_LO = Math.log(REVIEW_LO);
+  var LOG_HI = Math.log(REVIEW_HI);
+
+  var RANGES = {
+    price:    { lo: 0, hi: 0, linear: true },
+    discount: { lo: 0, hi: 95, linear: true },
+    rating:   { lo: 0, hi: 100, linear: true },
+    reviews:  { lo: REVIEW_LO, hi: REVIEW_HI, linear: false },
+  };
+
+  // 내부 교환은 모두 백분율(0~100)로 한다. 슬라이더 값(0~sliderMax)과
+  // 실제 값 사이의 변환은 여기 두 곳에서만 한다.
+  // 할인율은 0~95, 가격은 0~p98 처럼 스케일이 다르기 때문에
+  // 슬라이더 값을 곧바로 백분율로 쓰면 안 된다.
+
+  function sliderMax(key) { return RANGES[key].linear ? Math.max(1, RANGES[key].hi) : 100; }
+
+  /** 슬라이더 값 → 백분율 0~100 */
+  function pctOf(key, sliderValue) {
+    return (Number(sliderValue) / sliderMax(key)) * 100;
+  }
+
+  /** 백분율 0~100 → 슬라이더 값 (반올림) */
+  function sliderOf(key, pct) {
+    var span = sliderMax(key);
+    return String(Math.max(0, Math.min(span, Math.round((pct / 100) * span))));
+  }
+
+  /** 백분율 → 실제 값 */
+  function toReal(key, pct) {
+    var r = RANGES[key];
+    if (r.linear) return r.lo + ((r.hi - r.lo) * pct) / 100;
+    return Math.exp(LOG_LO + ((LOG_HI - LOG_LO) * pct) / 100);
+  }
+
+  /** 실제 값 → 백분율 */
+  function toPct(key, value) {
+    var r = RANGES[key];
+    if (r.linear) {
+      var span = r.hi - r.lo;
+      if (span <= 0) return 0;
+      return Math.max(0, Math.min(100, ((value - r.lo) / span) * 100));
+    }
+    if (value <= r.lo) return 0;
+    if (value >= r.hi) return 100;
+    return Math.max(0, Math.min(100, ((Math.log(value) - LOG_LO) / (LOG_HI - LOG_LO)) * 100));
+  }
+
+  function realPair(key) {
+    var a = pctOf(key, el[key + "Min"].value);
+    var b = pctOf(key, el[key + "Max"].value);
+    var lo = toReal(key, Math.min(a, b));
+    var hi = toReal(key, Math.max(a, b));
+    if (!RANGES[key].linear) {
+      lo = Math.round(lo);
+      hi = Math.round(hi);
+    }
+    return { lo: lo, hi: hi };
+  }
+
+  function setRange(key) {
+    var a = el[key + "Min"];
+    var b = el[key + "Max"];
+    var span = sliderMax(key);
+
+    // 핸들이 서로 넘어가면 지금 끌고 있는 쪽을 따라간다
+    if (Number(a.value) > Number(b.value)) {
+      if (document.activeElement === a) b.value = a.value;
+      else a.value = b.value;
+    }
+
+    var loPct = pctOf(key, a.value);
+    var hiPct = pctOf(key, b.value);
+    var fill = el[key + "Fill"];
+    fill.style.left = loPct + "%";
+    fill.style.width = Math.max(0, hiPct - loPct) + "%";
+  }
+
   /* ---------- 필터 상태 ---------- */
   function readFilters() {
-    return {
-      q: el.q.value.trim().toLowerCase(),
-      sort: el.sort.value,
-      price: Number(el.price.value),
-      discount: Number(el.discount.value),
-      rating: Number(el.rating.value),
-      reviews: Number(el.reviews.value),
-      hideSeen: el.hideSeen.checked,
-    };
+    var f = { q: el.q.value.trim().toLowerCase(), sort: el.sort.value, hideSeen: el.hideSeen.checked };
+    Object.keys(RANGES).forEach(function (key) {
+      var p = realPair(key);
+      f[key + "Min"] = p.lo;
+      f[key + "Max"] = p.hi;
+    });
+    return f;
   }
 
   function saveFilters() {
@@ -76,10 +162,15 @@
       if (!s) return;
       if (s.q) el.q.value = s.q;
       if (s.sort) el.sort.value = s.sort;
-      if (typeof s.price === "number") el.price.value = s.price;
-      if (typeof s.discount === "number") el.discount.value = s.discount;
-      if (typeof s.rating === "number") el.rating.value = s.rating;
-      if (s.reviews) el.reviews.value = String(s.reviews);
+      Object.keys(RANGES).forEach(function (key) {
+        var r = RANGES[key];
+        if (typeof s[key + "Min"] === "number") {
+          el[key + "Min"].value = sliderOf(key, toPct(key, Math.max(r.lo, s[key + "Min"])));
+        }
+        if (typeof s[key + "Max"] === "number") {
+          el[key + "Max"].value = sliderOf(key, toPct(key, Math.min(r.hi, s[key + "Max"])));
+        }
+      });
       el.hideSeen.checked = !!s.hideSeen;
     } catch (e) {}
   }
@@ -91,10 +182,10 @@
 
     for (var i = 0; i < state.list.length; i++) {
       var g = state.list[i];
-      if (f.price < state.priceMax && g.s > f.price) continue;
-      if (f.discount > 0 && g.d < f.discount) continue;
-      if (f.rating > 0 && g.p < f.rating) continue;
-      if (f.reviews > 0 && g.c < f.reviews) continue;
+      if (g.s < f.priceMin || g.s > f.priceMax) continue;
+      if (g.d < f.discountMin || g.d > f.discountMax) continue;
+      if (g.p < f.ratingMin || g.p > f.ratingMax) continue;
+      if (g.c < f.reviewsMin || g.c > f.reviewsMax) continue;
       if (f.hideSeen && g.f < state.dataDate) continue;
       if (f.q && g.n.toLowerCase().indexOf(f.q) === -1) continue;
       out.push(g);
@@ -176,22 +267,39 @@
   function renderReset() { render(true); }
 
   /* ---------- 출력 라벨 ---------- */
+  function rangeText(key, f) {
+    var r = RANGES[key];
+    var lo = f[key + "Min"];
+    var hi = f[key + "Max"];
+    var fmt = (key === "price") ? function (v) { return money(v); }
+            : (key === "reviews") ? compact
+            : function (v) { return v + "%"; };
+    var atLo = key === "price" ? lo <= r.lo : lo <= r.lo;
+    var atHi = key === "price" ? hi >= r.hi : hi >= r.hi;
+    if (atLo && atHi) return "전체";
+    if (atLo) return "≤ " + fmt(Math.round(hi * 100) / 100);
+    if (atHi) return fmt(Math.round(lo * 100) / 100) + "+";
+    return fmt(Math.round(lo * 100) / 100) + "~" + fmt(Math.round(hi * 100) / 100);
+  }
+
   function updateLabels() {
-    el.priceOut.textContent = Number(el.price.value) >= state.priceMax ? "전체" : "≤ " + money(el.price.value);
-    el.discountOut.textContent = Number(el.discount.value) > 0 ? el.discount.value + "%+" : "전체";
-    el.ratingOut.textContent = Number(el.rating.value) > 0 ? el.rating.value + "%+" : "전체";
-    updateSummary();
+    var f = readFilters();
+    el.priceOut.textContent = rangeText("price", f);
+    el.discountOut.textContent = rangeText("discount", f);
+    el.ratingOut.textContent = rangeText("rating", f);
+    el.reviewsOut.textContent = rangeText("reviews", f);
+    updateSummary(f);
   }
 
   /* 접힌 상태에서 현재 조건을 한 줄로 보여준다. */
-  function updateSummary() {
-    var f = readFilters();
+  function updateSummary(f) {
+    f = f || readFilters();
     var parts = [];
     if (f.q) parts.push("‘" + f.q + "’");
-    if (Number(el.price.value) < state.priceMax) parts.push("≤ " + money(f.price));
-    if (f.discount > 0) parts.push(f.discount + "%+");
-    if (f.rating > 0) parts.push("★" + f.rating + "+");
-    if (f.reviews > 0) parts.push("리뷰 " + compact(f.reviews) + "+");
+    Object.keys(RANGES).forEach(function (key) {
+      var t = rangeText(key, f);
+      if (t !== "전체") parts.push((key === "rating" ? "★" : "") + t);
+    });
     if (f.hideSeen) parts.push("본 것 숨김");
     el.filterSummary.textContent = parts.length ? parts.join(" · ") : "전체";
   }
@@ -209,14 +317,51 @@
   }
 
   function calibratePrice() {
-    // 98퍼센타일 근처로 슬라이더 상한을 맞춰 대부분이 필터에 걸리지 않게 한다
+    // 슬라이더 상한은 실제 최댓값을 쓴다.
+    // 예전에 98퍼센타일로 잘랐더니 값이 비싼 게임 46개가 핸들이 닿지 않아
+    // 조용히 사라졌고, 라벨은 "전체"라고 표시했다.
     var prices = state.list.map(function (g) { return g.s; }).sort(function (a, b) { return a - b; });
     if (!prices.length) return;
-    var p98 = prices[Math.min(prices.length - 1, Math.floor(prices.length * 0.98))];
-    var max = Math.max(10, Math.ceil(p98 / 10) * 10);
-    el.price.max = String(max);
+    var max = Math.max(10, Math.ceil(prices[prices.length - 1]));
+    RANGES.price.hi = max;
     state.priceMax = max;
-    if (Number(el.price.value) > max) el.price.value = String(max);
+
+    var full = sliderMax("price");
+    el.priceMin.max = String(full);
+    el.priceMax.max = String(full);
+    el.priceMin.value = "0";
+    el.priceMax.value = String(full);
+
+    var priceTicks = document.querySelector('[data-ticks="price"]');
+    if (priceTicks) {
+      priceTicks.innerHTML = "";
+      addTick(priceTicks, 0, "0");
+      addTick(priceTicks, Math.round(max * 0.25), money(Math.round(max * 0.25)));
+      addTick(priceTicks, Math.round(max * 0.5), money(Math.round(max * 0.5)));
+      addTick(priceTicks, Math.round(max * 0.75), money(Math.round(max * 0.75)));
+      addTick(priceTicks, max, money(max));
+    }
+
+    layoutTicks();
+  }
+
+  function addTick(container, value, label) {
+    var s = document.createElement("span");
+    s.setAttribute("data-v", String(value));
+    s.textContent = label;
+    container.appendChild(s);
+  }
+
+  /* 눈금 위치는 실제 값의 백분율로 계산한다. 로그 스케일에서
+   * 균등 배치를 쓰면 전부 어긋난다. */
+  function layoutTicks() {
+    document.querySelectorAll("[data-ticks]").forEach(function (box) {
+      var key = box.getAttribute("data-ticks");
+      if (!RANGES[key]) return;
+      box.querySelectorAll("span[data-v]").forEach(function (s) {
+        s.style.left = toPct(key, Number(s.getAttribute("data-v"))) + "%";
+      });
+    });
   }
 
   function bind() {
@@ -226,13 +371,32 @@
       timer = setTimeout(function () { updateLabels(); saveFilters(); renderReset(); }, 140);
     }
 
-    ["q", "sort", "price", "discount", "rating", "reviews"].forEach(function (id) {
+    ["q", "sort"].forEach(function (id) {
       el[id].addEventListener("input", function () {
         if (id === "q") { schedule(); return; }
         updateLabels(); saveFilters(); renderReset();
       });
       el[id].addEventListener("change", function () {
         updateLabels(); saveFilters(); renderReset();
+      });
+    });
+
+    // 범위형 필터: 썸을 끌 때마다 라벨과 요약을 갱신하고,
+    // 손을 떼면 필터를 실제로 적용한다.
+    Object.keys(RANGES).forEach(function (key) {
+      ["Min", "Max"].forEach(function (side) {
+        var input = el[key + side];
+        input.addEventListener("input", function () {
+          setRange(key);
+          updateLabels();
+          schedule();
+        });
+        input.addEventListener("change", function () {
+          setRange(key);
+          updateLabels();
+          saveFilters();
+          renderReset();
+        });
       });
     });
 
@@ -252,10 +416,12 @@
       try { localStorage.removeItem(LS_KEY); } catch (e) {}
       el.q.value = "";
       el.sort.value = "price-asc";
-      el.price.value = el.price.max;
-      el.discount.value = "0";
-      el.rating.value = "0";
-      el.reviews.value = "0";
+      Object.keys(RANGES).forEach(function (key) {
+        var full = sliderMax(key);
+        el[key + "Min"].value = "0";
+        el[key + "Max"].value = String(full);
+        setRange(key);
+      });
       el.hideSeen.checked = false;
       updateLabels();
       renderReset();
@@ -344,8 +510,11 @@
     state.dataDate = (data.scrapedAt || "").slice(0, 10);
     state.list = data.games || [];
 
-    loadFilters();
+    // 가격 상한을 먼저 정한 뒤에 저장된 필터를 복원해야 한다.
+    // 순서가 바뀌면 priceMin/max 의 max 가 아직 0 이어서 복원값이 깨진다.
     calibratePrice();
+    loadFilters();
+    Object.keys(RANGES).forEach(setRange);
     updateLabels();
     header();
     bind();

@@ -97,6 +97,102 @@ body {
 .filters-inner { max-width: 1240px; margin: 0 auto; padding: 12px 16px; }
 .row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; flex-wrap: wrap; }
 .row-last { margin-bottom: 0; align-items: center; }
+/* ---------- 범위형 필터 (양핸들 슬라이더) ---------- */
+.rng {
+  flex: 1 1 260px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rng-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.rng-head label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.rng-head output { color: var(--blue); font-weight: 700; font-size: 12px; }
+
+.rng-track { position: relative; height: 26px; }
+.rng-track::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 11px;
+  height: 4px;
+  border-radius: 2px;
+  background: #0e1620;
+  border: 1px solid var(--line);
+}
+.rng-fill {
+  position: absolute;
+  top: 11px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* 두 input 이 같은 트랙을 공유한다. 트랙은 클릭 무시, 썸만 잡는다. */
+.rng-track input[type=range] {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  top: 0;
+  height: 26px;
+  margin: 0;
+  background: none;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+}
+.rng-track input[type=range]:focus { outline: none; }
+.rng-track input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(26,159,255,.35); }
+
+.rng-track input[type=range]::-webkit-slider-runnable-track { height: 26px; background: none; border: none; }
+.rng-track input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  cursor: grab;
+}
+.rng-track input[type=range]::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.12); }
+
+.rng-track input[type=range]::-moz-range-track { height: 26px; background: none; border: none; }
+.rng-track input[type=range]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  cursor: grab;
+}
+
+/* 눈금은 실제 값 좌표에 배치한다. 로그 스케일이라 균등 배치가 틀린다. */
+.rng-ticks {
+  position: relative;
+  height: 13px;
+  margin-top: -2px;
+}
+.rng-ticks span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: #5f6b78;
+  white-space: nowrap;
+}
+.rng-ticks span:first-child { transform: none; }
+.rng-ticks span:last-child { transform: translateX(-100%); }
+
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 150px; }
 .field.grow { flex: 1 1 220px; }
 .field label {
