@@ -611,7 +611,9 @@
   function setupSW() {
     if (!("serviceWorker" in navigator)) return;
     if (location.protocol === "file:") return;
-    navigator.serviceWorker.register("sw.js").catch(function () {});
+    // updateViaCache: "none" — 브라우저가 sw.js 를 HTTP 캐시로 돌리지 않고
+    // 매 방문마다 변경 여부를 확인한다. 이게 없으면 갱신이 멈출 수 있다.
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(function () {});
   }
 
   /* ---------- 시작 ---------- */
